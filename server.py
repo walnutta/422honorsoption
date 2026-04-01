@@ -24,7 +24,7 @@ from ultralytics import YOLO
 
 HOST = "0.0.0.0"   # Listen on all interfaces so Quest 3 can reach it over WiFi
 PORT = 8765
-MODEL_PATH = "yolov8n.pt"  # nano = fastest; swap for yolov8s.pt / yolov8m.pt if you want more accuracy
+MODEL_PATH = "yolov8n.pt" 
 CONFIDENCE_THRESHOLD = 0.4
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
