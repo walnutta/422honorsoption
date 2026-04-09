@@ -5,14 +5,13 @@ using NativeWebSocket;
 public class WebSocketClient : MonoBehaviour
 {
     WebSocket ws;
-    private string serverIP = "127.0.0.1"; // change to your server's IP
+    private string serverIP = "127.0.0.1";
     public int port = 8765;
 
     async void Start()
     {
         string url = $"ws://{serverIP}:{port}";
         Debug.Log("Attempting to connect to: " + url);
-
         ws = new WebSocket(url);
         ws.OnOpen += () => Debug.Log("Connected to server!");
         ws.OnError += (e) => Debug.LogError("WS Error: " + e);
@@ -21,16 +20,28 @@ public class WebSocketClient : MonoBehaviour
             string json = System.Text.Encoding.UTF8.GetString(bytes);
             Debug.Log("Response: " + json);
         };
-
-        Debug.Log("Calling Connect...");
         await ws.Connect();
+        await System.Threading.Tasks.Task.Delay(500); // wait for Unity to stabilize
         Debug.Log("Connect returned, state: " + ws.State);
+
+        if (ws.State == WebSocketState.Open)
+        {
+            byte[] testImage = System.IO.File.ReadAllBytes(@"C:\Users\abc\Documents\422honorsoption\test.jpg");
+            Debug.Log("Sending image, size: " + testImage.Length + " bytes");
+            await ws.Send(testImage);
+            Debug.Log("Image sent!");
+        }
+        else
+        {
+            Debug.LogError("WebSocket not open, state: " + ws.State);
+        }
     }
+
     void Update()
     {
-        // Required on non-WebGL platforms to dispatch messages
 #if !UNITY_WEBGL || UNITY_EDITOR
-        ws.DispatchMessageQueue();
+        if (ws != null)
+            ws.DispatchMessageQueue();
 #endif
     }
 
@@ -42,6 +53,7 @@ public class WebSocketClient : MonoBehaviour
 
     async void OnApplicationQuit()
     {
-        await ws.Close();
+        if (ws != null)
+            await ws.Close();
     }
 }
