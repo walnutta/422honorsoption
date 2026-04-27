@@ -7,16 +7,20 @@ using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Android;
+using TMPro;
+using UnityEngine.UI;
 
 public class QuestYoloEngine : MonoBehaviour
 {
-    [Header("Network (CHANGE THIS)")]
-    public string serverUrl = "ws://192.168.1.50:8765"; // PUT YOUR PC'S LOCAL WI-FI IP HERE
+    [Header("Network")]
+    public TMP_InputField ipInputField;
+    public string serverPort = "8765";
     public float sendInterval = 0.5f;
 
     [Header("UI References")]
     public DetectionPanelView panelView;
 
+    private string serverUrl;
     private WebCamTexture questCamera;
     private Texture2D exportTexture;
     private ClientWebSocket ws;
@@ -26,11 +30,16 @@ public class QuestYoloEngine : MonoBehaviour
 
     void Start()
     {
-        // Ask headset for camera access
         if (!Permission.HasUserAuthorizedPermission("horizonos.permission.HEADSET_CAMERA"))
             Permission.RequestUserPermission("horizonos.permission.HEADSET_CAMERA");
-
         StartCoroutine(InitCamera());
+    }
+
+    public void OnConnectPressed()
+    {
+        string ip = ipInputField.text.Trim();
+        serverUrl = $"ws://{ip}:{serverPort}";
+        Debug.Log("Connecting to: " + serverUrl);
         ConnectWebSocket();
     }
 
@@ -42,6 +51,11 @@ public class QuestYoloEngine : MonoBehaviour
         {
             questCamera = new WebCamTexture(devices[0].name, 640, 480, 10);
             questCamera.Play();
+
+            // Show camera feed on RawImage
+            RawImage rawImg = panelView.imageContainer.GetComponent<RawImage>();
+            if (rawImg != null)
+                rawImg.texture = questCamera;
         }
     }
 
@@ -52,6 +66,7 @@ public class QuestYoloEngine : MonoBehaviour
         try
         {
             await ws.ConnectAsync(new Uri(serverUrl), cts.Token);
+            Debug.Log("Connected!");
             _ = ReceiveLoop();
         }
         catch (Exception e) { Debug.LogError("Network Error: " + e.Message); }
@@ -97,10 +112,8 @@ public class QuestYoloEngine : MonoBehaviour
     {
         if (exportTexture == null || exportTexture.width != questCamera.width)
             exportTexture = new Texture2D(questCamera.width, questCamera.height, TextureFormat.RGB24, false);
-
         exportTexture.SetPixels(questCamera.GetPixels());
         exportTexture.Apply();
-
         var segment = new ArraySegment<byte>(exportTexture.EncodeToJPG(40));
         _ = ws.SendAsync(segment, WebSocketMessageType.Binary, true, cts.Token);
     }

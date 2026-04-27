@@ -13,6 +13,7 @@ public class DetectionItem
 public class DetectionData
 {
     public List<DetectionItem> detections;
-    public int count;
     public float inference_ms;
+    public int[] image_size;
+    public int count => detections != null ? detections.Count : 0;
 }

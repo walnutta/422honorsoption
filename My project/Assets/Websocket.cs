@@ -5,7 +5,7 @@ using NativeWebSocket;
 public class WebSocketClient : MonoBehaviour
 {
     WebSocket ws;
-    private string serverIP = "127.0.0.1";
+    private string serverIP = "35.21.22.48";
     public int port = 8765;
 
     async void Start()
