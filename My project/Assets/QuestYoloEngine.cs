@@ -30,11 +30,10 @@ public class QuestYoloEngine : MonoBehaviour
 
     void Start()
     {
-        if (!Permission.HasUserAuthorizedPermission("horizonos.permission.HEADSET_CAMERA"))
-            Permission.RequestUserPermission("horizonos.permission.HEADSET_CAMERA");
         StartCoroutine(InitCamera());
+        // serverUrl = $"ws://35.21.22.48:{serverPort}";
+        ConnectWebSocket();
     }
-
     public void OnConnectPressed()
     {
         string ip = ipInputField.text.Trim();
@@ -42,7 +41,6 @@ public class QuestYoloEngine : MonoBehaviour
         Debug.Log("Connecting to: " + serverUrl);
         ConnectWebSocket();
     }
-
     IEnumerator InitCamera()
     {
         yield return new WaitForSeconds(1f);
@@ -51,14 +49,11 @@ public class QuestYoloEngine : MonoBehaviour
         {
             questCamera = new WebCamTexture(devices[0].name, 640, 480, 10);
             questCamera.Play();
-
-            // Show camera feed on RawImage
-            RawImage rawImg = panelView.imageContainer.GetComponent<RawImage>();
+            RawImage rawImg = FindObjectOfType<RawImage>();
             if (rawImg != null)
                 rawImg.texture = questCamera;
         }
     }
-
     async void ConnectWebSocket()
     {
         ws = new ClientWebSocket();
@@ -69,23 +64,37 @@ public class QuestYoloEngine : MonoBehaviour
             Debug.Log("Connected!");
             _ = ReceiveLoop();
         }
-        catch (Exception e) { Debug.LogError("Network Error: " + e.Message); }
+        catch (Exception e) 
+        { 
+            Debug.LogError("Connect Error: " + e.Message + "\n" + e.StackTrace); 
+        }
     }
 
     async Task ReceiveLoop()
     {
         var buffer = new byte[8192];
-        while (ws.State == WebSocketState.Open)
+        try
         {
-            var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
-            if (result.MessageType == WebSocketMessageType.Text)
+            while (ws.State == WebSocketState.Open)
             {
-                string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                lock (messageQueue) { messageQueue.Enqueue(json); }
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), cts.Token);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    Debug.LogWarning("Server sent close frame");
+                    break;
+                }
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    string json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    lock (messageQueue) { messageQueue.Enqueue(json); }
+                }
             }
         }
+        catch (Exception e)
+        {
+            Debug.LogError("ReceiveLoop Error: " + e.Message + "\n" + e.StackTrace);
+        }
     }
-
     void Update()
     {
         lock (messageQueue)
