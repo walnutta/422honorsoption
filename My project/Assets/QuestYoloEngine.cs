@@ -28,10 +28,23 @@ public class QuestYoloEngine : MonoBehaviour
     private float timer = 0f;
     private Queue<string> messageQueue = new Queue<string>();
 
-    void Start()
+
+    
+void Start()
     {
-        StartCoroutine(InitCamera());
-        // serverUrl = $"ws://35.21.22.48:{serverPort}";
+        if (!Permission.HasUserAuthorizedPermission("horizonos.permission.HEADSET_CAMERA"))
+        {
+            var callbacks = new PermissionCallbacks();
+            callbacks.PermissionGranted += (perm) => StartCoroutine(InitCamera());
+            callbacks.PermissionDenied += (perm) => Debug.LogError("Camera permission denied!");
+            Permission.RequestUserPermission("horizonos.permission.HEADSET_CAMERA", callbacks);
+        }
+        else
+        {
+            StartCoroutine(InitCamera());
+        }
+
+        serverUrl = $"ws://35.12.215.46:8765";
         ConnectWebSocket();
     }
     public void OnConnectPressed()
@@ -43,8 +56,12 @@ public class QuestYoloEngine : MonoBehaviour
     }
     IEnumerator InitCamera()
     {
-        yield return new WaitForSeconds(1f);
+        yield return new WaitForSeconds(2f);
         WebCamDevice[] devices = WebCamTexture.devices;
+        Debug.Log("=== CAMERA DEBUG === Device count: " + devices.Length);
+        foreach (var d in devices)
+            Debug.Log("Device: " + d.name);
+
         if (devices.Length > 0)
         {
             questCamera = new WebCamTexture(devices[0].name, 640, 480, 10);
