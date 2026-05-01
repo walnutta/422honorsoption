@@ -19,8 +19,8 @@ public class QuestYoloEngine : MonoBehaviour
     public string serverPort = "8765";
 
     [Header("Adaptive Frame Rate")]
-    public float minSendInterval = 0.033f; // max 30fps
-    public float maxSendInterval = 1.0f;   // min 1fps
+    public float minSendInterval = 0.063f; // max 60fps
+    public float maxSendInterval = 0.1f;   // min 10fps
 
     [Header("UI References")]
     public DetectionPanelView panelView;
@@ -49,7 +49,7 @@ public class QuestYoloEngine : MonoBehaviour
             RequestHeadsetCamera();
         }
 
-        serverUrl = $"ws://35.21.58.106:8765";
+        serverUrl = $"ws://35.21.58.106:8765"; // Hardcoded
         ConnectWebSocket();
     }
 
