@@ -1,78 +1,100 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 
 public class DetectionPanelView : MonoBehaviour
 {
     [Header("Text List UI")]
-    public Transform contentParent;
-    public GameObject textRowPrefab;
     public TextMeshProUGUI statusText;
 
-    [Header("Visual Box UI")]
-    public RectTransform imageContainer; // Drag your DisplayImage here
-    public GameObject boundingBoxPrefab; // Drag your BoundingBox prefab here
+    [Header("3D Placement")]
+    public Camera centerEyeCamera;
+    public GameObject boundingBox3DPrefab;
+    public float fallbackDistance = 2f;
+    public float smoothSpeed = 8f;
 
-    private List<GameObject> activeUIElements = new List<GameObject>();
+    private Dictionary<string, GameObject> activeBoxes = new Dictionary<string, GameObject>();
+    private Dictionary<string, float> boxLastSeen = new Dictionary<string, float>();
+    private float boxTimeout = 1f; // remove box if not seen for 1 second
+
+    void Update()
+    {
+        // Remove boxes that haven't been seen recently
+        List<string> toRemove = new List<string>();
+        foreach (var key in boxLastSeen.Keys)
+        {
+            if (Time.time - boxLastSeen[key] > boxTimeout)
+                toRemove.Add(key);
+        }
+        foreach (var key in toRemove)
+        {
+            if (activeBoxes.ContainsKey(key))
+                Destroy(activeBoxes[key]);
+            activeBoxes.Remove(key);
+            boxLastSeen.Remove(key);
+        }
+    }
 
     public void UpdateData(DetectionData data)
     {
-        statusText.text = $"Objects: {data.count} | Time: {data.inference_ms:0}ms";
+        if (statusText != null)
+            statusText.text = $"Objects: {data.count} | Time: {data.inference_ms:0}ms";
 
-        foreach (var element in activeUIElements) Destroy(element);
-        activeUIElements.Clear();
+        if (data.detections == null) return;
 
-        if (data.detections != null)
+        HashSet<string> seenKeys = new HashSet<string>();
+
+        for (int i = 0; i < data.detections.Count; i++)
         {
-            // --- NEW MATH LOGIC ---
-            // Get the raw pixel size of the image, and the current UI size of the container
-            RawImage rawImg = imageContainer.GetComponent<RawImage>();
-            float originalImageWidth = rawImg.texture.width;
-            float originalImageHeight = rawImg.texture.height;
-            float uiBoxWidth = imageContainer.rect.width;
-            float uiBoxHeight = imageContainer.rect.height;
+            var item = data.detections[i];
+            if (item.bbox_norm == null || item.bbox_norm.Length < 4) continue;
 
-            // Calculate the difference in scale
-            float scaleX = uiBoxWidth / originalImageWidth;
-            float scaleY = uiBoxHeight / originalImageHeight;
-            // ----------------------
+            // Use label + index as key to handle multiple same-label objects
+            string key = $"{item.label}_{i}";
+            seenKeys.Add(key);
+            boxLastSeen[key] = Time.time;
 
-            foreach (var item in data.detections)
+            float cx = item.bbox_norm[0];
+            float cy = 1f - item.bbox_norm[1];
+            float w = item.bbox_norm[2];
+            float h = item.bbox_norm[3];
+
+            Vector3 viewportPoint = new Vector3(cx, cy, 0);
+            Ray ray = centerEyeCamera.ViewportPointToRay(viewportPoint);
+
+            float distance = fallbackDistance;
+            if (Physics.Raycast(ray, out RaycastHit hit, 10f))
+                distance = hit.distance;
+
+            Vector3 targetPos = ray.GetPoint(distance);
+            Quaternion targetRot = Quaternion.LookRotation(ray.direction);
+
+            float boxWidth = w * distance;
+            float boxHeight = h * distance;
+            Vector3 targetScale = new Vector3(boxWidth, boxHeight, 0.01f);
+
+            if (!activeBoxes.ContainsKey(key))
             {
-                // Spawn Text Row
-                if (textRowPrefab != null && contentParent != null)
-                {
-                    GameObject newRow = Instantiate(textRowPrefab, contentParent);
-                    newRow.GetComponent<DetectionRowView>().Setup(item);
-                    activeUIElements.Add(newRow);
-                }
+                // Spawn new box
+                GameObject box = Instantiate(boundingBox3DPrefab, targetPos, targetRot);
+                box.transform.localScale = targetScale;
+                activeBoxes[key] = box;
 
-                // Spawn Visual Bounding Box
-                if (boundingBoxPrefab != null && imageContainer != null && item.bbox.Length == 4)
-                {
-                    GameObject newBox = Instantiate(boundingBoxPrefab, imageContainer);
-                    activeUIElements.Add(newBox);
+                TextMeshPro label = box.GetComponentInChildren<TextMeshPro>();
+                if (label != null)
+                    label.text = $"{item.label} {(item.confidence * 100):0}%";
+            }
+            else
+            {
+                // Smoothly move existing box
+                GameObject box = activeBoxes[key];
+                box.transform.position = Vector3.Lerp(box.transform.position, targetPos, Time.deltaTime * smoothSpeed);
+                box.transform.rotation = Quaternion.Slerp(box.transform.rotation, targetRot, Time.deltaTime * smoothSpeed);
+                box.transform.localScale = Vector3.Lerp(box.transform.localScale, targetScale, Time.deltaTime * smoothSpeed);
 
-                    RectTransform rt = newBox.GetComponent<RectTransform>();
-
-                    // Force anchors to Top-Left
-                    rt.anchorMin = new Vector2(0, 1);
-                    rt.anchorMax = new Vector2(0, 1);
-                    rt.pivot = new Vector2(0, 1);
-
-                    // Multiply the Python coordinates by our Scale math
-                    float xMin = item.bbox[0] * scaleX;
-                    float yMin = item.bbox[1] * scaleY;
-                    float width = (item.bbox[2] - item.bbox[0]) * scaleX;
-                    float height = (item.bbox[3] - item.bbox[1]) * scaleY;
-
-                    rt.anchoredPosition = new Vector2(xMin, -yMin);
-                    rt.sizeDelta = new Vector2(width, height);
-
-                    TextMeshProUGUI label = newBox.GetComponentInChildren<TextMeshProUGUI>();
-                    if (label != null) label.text = $"{item.label} {(item.confidence * 100):0}%";
-                }
+                TextMeshPro label = box.GetComponentInChildren<TextMeshPro>();
+                if (label != null)
+                    label.text = $"{item.label} {(item.confidence * 100):0}%";
             }
         }
     }

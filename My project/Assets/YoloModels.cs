@@ -7,6 +7,7 @@ public class DetectionItem
     public string label;
     public float confidence;
     public float[] bbox;
+    public float[] bbox_norm; // add this line
 }
 
 [Serializable]

@@ -1,15 +1,3 @@
-"""
-inference_server.py
--------------------
-WebSocket server that receives a JPEG image from a client,
-runs YOLOv8 object detection on GPU, and returns JSON results.
-
-Install dependencies:
-    pip install ultralytics websockets pillow
-
-Run:
-    python inference_server.py
-"""
 
 import asyncio
 import json
@@ -22,9 +10,9 @@ from PIL import Image
 from ultralytics import YOLO
 
 
-HOST = "0.0.0.0"   # Listen on all interfaces so Quest 3 can reach it over WiFi
+HOST = "0.0.0.0"   # Listen on all interfaces so Quest 3 can reach it over wifi
 PORT = 8765
-MODEL_PATH = "yolov8n.pt" 
+MODEL_PATH = "yolov8s.pt"
 CONFIDENCE_THRESHOLD = 0.4
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -48,7 +36,7 @@ async def handle_client(websocket):
         async for message in websocket:
             t_start = time.perf_counter()
 
-            # Decode the incoming JPEG bytes into a PIL Image 
+            # Decode the incoming JPEG bytes into a PIL Image
             try:
                 image = Image.open(BytesIO(message)).convert("RGB")
             except Exception as e:
@@ -56,27 +44,52 @@ async def handle_client(websocket):
                 await websocket.send(json.dumps({"error": "invalid image"}))
                 continue
 
+            img_w, img_h = image.size
+
             # Run YOLOv8 inference on GPU
             results = model(image, conf=CONFIDENCE_THRESHOLD, verbose=False)
 
-            # Parse detections into a plain list of dicts 
+            # Parse detections into a plain list of dicts
             detections = []
             for result in results:
                 for box in result.boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].tolist()
+
+                    # Pixel-space center and size
+                    cx_px = (x1 + x2) / 2.0
+                    cy_px = (y1 + y2) / 2.0
+                    w_px  = x2 - x1
+                    h_px  = y2 - y1
+
+                    # Normalized [0..1] — cx/cy are proportional image coords.
+                    # Unity will use these to build the viewport ray and estimate
+                    # world-space box size at the hit depth.
+                    cx_n = cx_px / img_w
+                    cy_n = cy_px / img_h
+                    w_n  = w_px  / img_w
+                    h_n  = h_px  / img_h
+
                     detections.append({
-                        "label": result.names[int(box.cls)],  
+                        "label":      result.names[int(box.cls)],
                         "confidence": round(float(box.conf), 3),
-                        # Bounding box as [x1, y1, x2, y2] in pixel coords
-                        "bbox": [round(v, 1) for v in box.xyxy[0].tolist()],
+                        "bbox": [round(v, 1) for v in [x1, y1, x2, y2]],
+                        # Normalized center + size for 3-D world projection
+                        # bbox_norm = [cx, cy, width, height] all in [0..1]
+                        "bbox_norm": [
+                            round(cx_n, 4),
+                            round(cy_n, 4),
+                            round(w_n,  4),
+                            round(h_n,  4),
+                        ],
                     })
 
             t_elapsed_ms = round((time.perf_counter() - t_start) * 1000, 1)
 
-            # Send results back as JSON 
+            # Send results back as JSON
             response = {
-                "detections": detections,
+                "detections":   detections,
                 "inference_ms": t_elapsed_ms,
-                "image_size": list(image.size),  # [width, height]
+                "image_size":   [img_w, img_h],
             }
             await websocket.send(json.dumps(response))
 

@@ -166,7 +166,6 @@ __marimo__/
 # Abstra
 .abstra/
 
-# ── Unity ─────────────────────────────────────────────────────────────────────
 # Generated folders — Unity rebuilds these automatically, no need to commit them
 [Ll]ibrary/
 [Tt]emp/
@@ -179,6 +178,7 @@ __marimo__/
 # Asset meta files for ignored folders
 [Ll]ibrary.meta
 [Tt]emp.meta
+*.meta
 
 # Unity cache / auto-generated
 *.pidb.meta
