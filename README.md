@@ -1,8 +1,9 @@
 # 422honorsoption
 
 #### Files written for functions:
-
+<br>
 Server: server.py
+<br>
 Assets:
 <ul>
 <li>Mainscene: app main view/interface, combined of all scripts and prefab objects</li>
